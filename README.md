@@ -7,8 +7,10 @@ A command-line interface tool built with Spring Boot and picocli for running wor
 ## Features
 
 - Three workflow commands (workflow1, workflow2, workflow3)
-- **Workflow 1**: Terraform deployment pipeline using **Chain of Responsibility** + **Factory** patterns
+- **Workflow 1**: Terraform deployment pipeline using **Chain of Responsibility** + **Factory** + **Strategy** patterns
   - 6 stages: Workspace Name Generation, Init, Validate, Plan, Apply, Output
+  - **Context Object**: Shared state passed between handlers
+  - **Input Validation**: Each handler validates required attributes before execution
   - Each handler processes its stage and passes control to the next
   - Factory pattern creates different workspace naming strategies
 - **Workflow 2**: Terraform deployment pipeline using **Template Method** pattern
@@ -337,13 +339,15 @@ src/
 
 ### Chain of Responsibility + Factory + Strategy Patterns (Workflow 1)
 
-Workflow 1 demonstrates how multiple patterns work together:
+Workflow 1 demonstrates how multiple patterns work together with context passing and validation:
 
 **Chain of Responsibility:**
 - **TerraformHandler**: Abstract base class defining the chain interface
 - **Concrete Handlers**: Six specialized handlers for each Terraform stage
 - **Chain Flow**: Each handler processes its stage and passes control to the next
 - **Error Handling**: If any stage fails, the chain stops and returns failure
+- **Context Object**: `TerraformContext` is passed through the entire chain
+- **Input Validation**: Handlers declare required attributes and validation occurs before execution
 
 **Factory Pattern:**
 - **WorkspaceNameFactory**: Creates different workspace naming strategies based on user input
@@ -369,10 +373,32 @@ String workspaceName = strategy.generateWorkspaceName(workflowName, timeToRun);
 return passToNext(workflowName, timeToRun);
 ```
 
+**Context Passing:**
+The `TerraformContext` object allows handlers to:
+- Share state and data between stages
+- Store intermediate results (e.g., workspace name, instance ID)
+- Pass configuration throughout the pipeline
+- Maintain workflow metadata
+
+**Input Validation:**
+Each handler can declare required attributes:
+```java
+@Override
+protected Set<String> getRequiredAttributes() {
+    return requireAttributes("workspace_name", "terraform_initialized");
+}
+```
+
+Before executing, the framework validates that all required attributes exist in the context. If validation fails, execution stops with a clear error message.
+
 Benefits:
 - Decouples sender from receivers (Chain of Responsibility)
 - Centralizes object creation logic (Factory)
 - Allows runtime algorithm selection (Strategy)
+- Shared state through context object
+- Automatic input validation before handler execution
+- Type-safe attribute access
+- Clear error messages when validation fails
 - Easy to add new naming strategies without modifying existing code
 - Each handler has a single responsibility
 - Flexible and extensible design

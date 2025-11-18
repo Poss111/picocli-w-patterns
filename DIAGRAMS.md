@@ -38,13 +38,27 @@ classDiagram
         +run()
     }
     
+    %% Context Class
+    class TerraformContext {
+        -String workflowName
+        -String timeToRun
+        -Map~String,Object~ attributes
+        +setAttribute(String, Object)
+        +getAttribute(String) Object
+        +hasAttribute(String) boolean
+        +getAttributeKeys() Set~String~
+    }
+    
     %% Chain of Responsibility Pattern
     class TerraformHandler {
         <<abstract>>
         #TerraformHandler nextHandler
         +setNext(TerraformHandler) TerraformHandler
-        +handle(String, String) boolean
-        #passToNext(String, String) boolean
+        +handle(TerraformContext) boolean
+        #doHandle(TerraformContext) boolean*
+        #getRequiredAttributes() Set~String~
+        #passToNext(TerraformContext) boolean
+        #requireAttributes(String...) Set~String~
     }
     
     class WorkspaceNameHandler {
@@ -152,6 +166,7 @@ classDiagram
     TerraformHandler <|-- TerraformOutputHandler
     
     TerraformHandler o-- TerraformHandler : next
+    TerraformHandler --> TerraformContext : uses
     
     %% Relationships - Commands
     Workflow1Command --> WorkspaceNameHandler : creates
@@ -181,14 +196,15 @@ classDiagram
 
 ---
 
-## Workflow 1 Flow (Chain of Responsibility + Factory + Strategy)
+## Workflow 1 Flow (Chain of Responsibility + Factory + Strategy + Context)
 
-This sequence diagram shows the execution flow of Workflow 1, demonstrating how the Chain of Responsibility, Factory, and Strategy patterns work together.
+This sequence diagram shows the execution flow of Workflow 1, demonstrating how the Chain of Responsibility, Factory, Strategy patterns work together with context passing and validation.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant W1 as Workflow1Command
+    participant Ctx as TerraformContext
     participant WNH as WorkspaceNameHandler
     participant Factory as WorkspaceNameFactory
     participant Strategy as WorkspaceNameStrategy
@@ -199,32 +215,51 @@ sequenceDiagram
     participant Output as TerraformOutputHandler
     
     User->>W1: run()
+    W1->>Ctx: new TerraformContext(workflowName, timeToRun)
+    W1->>Ctx: setAttribute("environment", param)
     W1->>W1: Create handler instances
     W1->>WNH: Create with strategyType & parameter
     W1->>W1: Chain handlers together
-    W1->>WNH: handle(workflowName, timeToRun)
+    W1->>WNH: handle(context)
     
+    Note over WNH: No validation (no requirements)
     Note over WNH,Strategy: Factory Pattern
     WNH->>Factory: createStrategy(strategyType, parameter)
     Factory->>Strategy: new Strategy()
     Factory-->>WNH: return strategy instance
     
     Note over WNH,Strategy: Strategy Pattern
-    WNH->>Strategy: generateWorkspaceName(workflowName, timeToRun)
+    WNH->>Strategy: generateWorkspaceName()
     Strategy-->>WNH: return workspace name
-    WNH->>WNH: Print workspace name
+    WNH->>Ctx: setAttribute("workspace_name", name)
     
-    Note over WNH,Output: Chain of Responsibility
-    WNH->>Init: handle(workflowName, timeToRun)
+    Note over WNH,Output: Chain of Responsibility with Context
+    WNH->>Init: handle(context)
+    Init->>Init: Validate: requires "workspace_name"
     Init->>Init: Execute init stage
-    Init->>Validate: handle(workflowName, timeToRun)
+    Init->>Ctx: setAttribute("terraform_initialized", true)
+    
+    Init->>Validate: handle(context)
+    Validate->>Validate: Validate: requires "terraform_initialized"
     Validate->>Validate: Execute validate stage
-    Validate->>Plan: handle(workflowName, timeToRun)
+    Validate->>Ctx: setAttribute("configuration_valid", true)
+    
+    Validate->>Plan: handle(context)
+    Plan->>Plan: Validate: requires "configuration_valid"
     Plan->>Plan: Execute plan stage
-    Plan->>Apply: handle(workflowName, timeToRun)
+    Plan->>Ctx: setAttribute("plan_created", true)
+    
+    Plan->>Apply: handle(context)
+    Apply->>Apply: Validate: requires "plan_created"
     Apply->>Apply: Execute apply stage
-    Apply->>Output: handle(workflowName, timeToRun)
+    Apply->>Ctx: setAttribute("apply_complete", true)
+    
+    Apply->>Output: handle(context)
+    Output->>Output: Validate: requires "apply_complete"
+    Output->>Ctx: getAttribute("workspace_name")
+    Output->>Ctx: getAttribute("instance_id")
     Output->>Output: Execute output stage
+    
     Output-->>Apply: return success
     Apply-->>Plan: return success
     Plan-->>Validate: return success
@@ -382,6 +417,54 @@ flowchart LR
 
 ---
 
+---
+
+## Context and Validation Flow
+
+This diagram shows how context attributes are set and validated through the chain.
+
+```mermaid
+flowchart TD
+    Start([Start: Create Context]) --> WSH[WorkspaceNameHandler]
+    WSH -->|Sets: workspace_name| Init[TerraformInitHandler]
+    
+    Init -->|Validates: workspace_name| InitCheck{Validation}
+    InitCheck -->|✓ Pass| InitExec[Execute Init]
+    InitCheck -->|✗ Fail| Error[Return False]
+    InitExec -->|Sets: terraform_initialized<br/>provider_version| Val[TerraformValidateHandler]
+    
+    Val -->|Validates: terraform_initialized| ValCheck{Validation}
+    ValCheck -->|✓ Pass| ValExec[Execute Validate]
+    ValCheck -->|✗ Fail| Error
+    ValExec -->|Sets: configuration_valid| Plan[TerraformPlanHandler]
+    
+    Plan -->|Validates: configuration_valid<br/>workspace_name| PlanCheck{Validation}
+    PlanCheck -->|✓ Pass| PlanExec[Execute Plan]
+    PlanCheck -->|✗ Fail| Error
+    PlanExec -->|Sets: plan_created<br/>resources_to_add<br/>resources_to_change| Apply[TerraformApplyHandler]
+    
+    Apply -->|Validates: plan_created| ApplyCheck{Validation}
+    ApplyCheck -->|✓ Pass| ApplyExec[Execute Apply]
+    ApplyCheck -->|✗ Fail| Error
+    ApplyExec -->|Sets: apply_complete<br/>instance_id<br/>security_group_id| Output[TerraformOutputHandler]
+    
+    Output -->|Validates: apply_complete| OutputCheck{Validation}
+    OutputCheck -->|✓ Pass| OutputExec[Execute Output]
+    OutputCheck -->|✗ Fail| Error
+    OutputExec -->|Reads all attributes| Success([Success])
+    
+    style Start fill:#e1f5ff,stroke:#333,stroke-width:2px
+    style Success fill:#d4edda,stroke:#333,stroke-width:2px
+    style Error fill:#f8d7da,stroke:#333,stroke-width:2px
+    style InitCheck fill:#fff3cd,stroke:#333,stroke-width:2px
+    style ValCheck fill:#fff3cd,stroke:#333,stroke-width:2px
+    style PlanCheck fill:#fff3cd,stroke:#333,stroke-width:2px
+    style ApplyCheck fill:#fff3cd,stroke:#333,stroke-width:2px
+    style OutputCheck fill:#fff3cd,stroke:#333,stroke-width:2px
+```
+
+---
+
 ## Design Patterns Summary
 
 ### Patterns Used
@@ -389,6 +472,7 @@ flowchart LR
 1. **Chain of Responsibility** (Workflow 1)
    - Handlers: `TerraformHandler` (abstract), `WorkspaceNameHandler`, `TerraformInitHandler`, `TerraformValidateHandler`, `TerraformPlanHandler`, `TerraformApplyHandler`, `TerraformOutputHandler`
    - Purpose: Process Terraform stages sequentially, stopping on failure
+   - **Enhancement**: Context passing and input validation
 
 2. **Factory Pattern** (Workflow 1)
    - Factory: `WorkspaceNameFactory`
@@ -408,5 +492,16 @@ flowchart LR
 
 Workflow 1 demonstrates how multiple patterns work together:
 - **WorkspaceNameHandler** (part of Chain of Responsibility) uses **WorkspaceNameFactory** (Factory pattern) to create a **WorkspaceNameStrategy** (Strategy pattern)
+- **TerraformContext** is passed through the entire chain, allowing handlers to share state
+- **Input Validation** ensures each handler has required data before execution
 - This shows how design patterns compose to create flexible, maintainable solutions
+
+### Context Object Benefits
+
+The `TerraformContext` provides:
+1. **Shared State**: Handlers can store and retrieve data
+2. **Type Safety**: Generic `getAttribute()` with type parameter
+3. **Validation**: Automatic checking of required attributes
+4. **Traceability**: Clear view of all attributes at any stage
+5. **Extensibility**: Easy to add new attributes without changing signatures
 

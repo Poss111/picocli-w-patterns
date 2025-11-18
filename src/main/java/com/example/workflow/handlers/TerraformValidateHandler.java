@@ -10,7 +10,13 @@ import org.springframework.stereotype.Component;
 public class TerraformValidateHandler extends TerraformHandler {
     
     @Override
-    public boolean handle(String workflowName, String timeToRun) {
+    protected java.util.Set<String> getRequiredAttributes() {
+        // Validate requires terraform to be initialized
+        return requireAttributes("terraform_initialized");
+    }
+    
+    @Override
+    protected boolean doHandle(com.example.workflow.context.TerraformContext context) {
         System.out.println("\n[Stage 2/5] Terraform Validate");
         System.out.println("─────────────────────────────");
         System.out.println("Validating Terraform configuration files...");
@@ -19,10 +25,14 @@ public class TerraformValidateHandler extends TerraformHandler {
         try {
             // Simulate validation process
             Thread.sleep(400);
+            
+            // Store validation results in context
+            context.setAttribute("configuration_valid", true);
+            
             System.out.println("✓ Configuration is valid!");
             
             // Pass to next handler
-            return passToNext(workflowName, timeToRun);
+            return passToNext(context);
             
         } catch (InterruptedException e) {
             System.err.println("✗ Validation stage failed: " + e.getMessage());

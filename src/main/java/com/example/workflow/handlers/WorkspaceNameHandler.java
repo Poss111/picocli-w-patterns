@@ -34,7 +34,7 @@ public class WorkspaceNameHandler extends TerraformHandler {
     }
     
     @Override
-    public boolean handle(String workflowName, String timeToRun) {
+    protected boolean doHandle(com.example.workflow.context.TerraformContext context) {
         System.out.println("\n[Stage 0/5] Workspace Name Generation");
         System.out.println("─────────────────────────────");
         System.out.println("Using Factory pattern to create workspace naming strategy...");
@@ -46,13 +46,17 @@ public class WorkspaceNameHandler extends TerraformHandler {
             System.out.println("Strategy: " + strategy.getStrategyDescription());
             
             // Generate the workspace name using the strategy
-            generatedWorkspaceName = strategy.generateWorkspaceName(workflowName, timeToRun);
+            generatedWorkspaceName = strategy.generateWorkspaceName(context.getWorkflowName(), context.getTimeToRun());
+            
+            // Store workspace name in context for other handlers to use
+            context.setAttribute("workspace_name", generatedWorkspaceName);
             
             System.out.println("Generated workspace name: " + generatedWorkspaceName);
             System.out.println("✓ Workspace name determined successfully!");
+            System.out.println("  (stored in context as 'workspace_name')");
             
             // Pass to next handler
-            return passToNext(workflowName, timeToRun);
+            return passToNext(context);
             
         } catch (IllegalArgumentException e) {
             System.err.println("✗ Workspace name generation failed: " + e.getMessage());
