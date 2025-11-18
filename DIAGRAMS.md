@@ -6,6 +6,8 @@ This document contains class diagrams and flow diagrams for the Workflow CLI app
 - [Overall Class Diagram](#overall-class-diagram)
 - [Workflow 1 Flow (Chain of Responsibility + Factory + Strategy)](#workflow-1-flow-chain-of-responsibility--factory--strategy)
 - [Workflow 2 Flow (Template Method)](#workflow-2-flow-template-method)
+- [Workflow 4 Flow (Spring State Machine)](#workflow-4-flow-spring-state-machine)
+- [State Machine State Diagram](#state-machine-state-diagram)
 - [Factory Pattern Detail](#factory-pattern-detail)
 - [Strategy Pattern Detail](#strategy-pattern-detail)
 
@@ -314,6 +316,115 @@ sequenceDiagram
 
 ---
 
+## Workflow 4 Flow (Spring State Machine)
+
+This diagram shows the execution flow of Workflow 4 using Spring State Machine pattern.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant W4 as Workflow4Command
+    participant SM as StateMachine
+    participant Ctx as TerraformContext
+    participant A1 as WorkspaceNameAction
+    participant A2 as InitAction
+    participant A3 as ValidateAction
+    participant A4 as PlanAction
+    participant A5 as ApplyAction
+    participant A6 as OutputAction
+    
+    User->>W4: run()
+    W4->>Ctx: new TerraformContext()
+    W4->>SM: Create StateMachine
+    W4->>SM: Store context in extended state
+    W4->>SM: start()
+    W4->>SM: sendEvent(START_WORKFLOW)
+    
+    Note over SM,A1: State Machine Pattern
+    SM->>SM: Transition to WORKSPACE_NAME_GENERATION
+    SM->>A1: execute()
+    A1->>Ctx: setAttribute("workspace_name", name)
+    A1->>SM: sendEvent(WORKSPACE_NAME_GENERATED)
+    
+    SM->>SM: Transition to TERRAFORM_INIT
+    SM->>A2: execute()
+    A2->>Ctx: getAttribute("workspace_name")
+    A2->>Ctx: setAttribute("terraform_initialized", true)
+    A2->>SM: sendEvent(INIT_COMPLETED)
+    
+    SM->>SM: Transition to TERRAFORM_VALIDATE
+    SM->>A3: execute()
+    A3->>Ctx: setAttribute("configuration_valid", true)
+    A3->>SM: sendEvent(VALIDATE_COMPLETED)
+    
+    SM->>SM: Transition to TERRAFORM_PLAN
+    SM->>A4: execute()
+    A4->>Ctx: setAttribute("plan_created", true)
+    A4->>SM: sendEvent(PLAN_COMPLETED)
+    
+    SM->>SM: Transition to TERRAFORM_APPLY
+    SM->>A5: execute()
+    A5->>Ctx: setAttribute("apply_complete", true)
+    A5->>SM: sendEvent(APPLY_COMPLETED)
+    
+    SM->>SM: Transition to TERRAFORM_OUTPUT
+    SM->>A6: execute()
+    A6->>Ctx: getAttribute("instance_id")
+    A6->>SM: sendEvent(OUTPUT_COMPLETED)
+    
+    SM->>SM: Transition to COMPLETED
+    SM-->>W4: State is COMPLETED
+    W4->>SM: stop()
+    W4-->>User: Workflow completed
+```
+
+---
+
+## State Machine State Diagram
+
+This state diagram shows all possible states and transitions in Workflow 4.
+
+```mermaid
+stateDiagram-v2
+    [*] --> INITIAL
+    INITIAL --> WORKSPACE_NAME_GENERATION : START_WORKFLOW
+    WORKSPACE_NAME_GENERATION --> TERRAFORM_INIT : WORKSPACE_NAME_GENERATED
+    TERRAFORM_INIT --> TERRAFORM_VALIDATE : INIT_COMPLETED
+    TERRAFORM_VALIDATE --> TERRAFORM_PLAN : VALIDATE_COMPLETED
+    TERRAFORM_PLAN --> TERRAFORM_APPLY : PLAN_COMPLETED
+    TERRAFORM_APPLY --> TERRAFORM_OUTPUT : APPLY_COMPLETED
+    TERRAFORM_OUTPUT --> COMPLETED : OUTPUT_COMPLETED
+    COMPLETED --> [*]
+    
+    WORKSPACE_NAME_GENERATION --> ERROR : ERROR_OCCURRED
+    TERRAFORM_INIT --> ERROR : ERROR_OCCURRED
+    TERRAFORM_VALIDATE --> ERROR : ERROR_OCCURRED
+    TERRAFORM_PLAN --> ERROR : ERROR_OCCURRED
+    TERRAFORM_APPLY --> ERROR : ERROR_OCCURRED
+    TERRAFORM_OUTPUT --> ERROR : ERROR_OCCURRED
+    ERROR --> [*]
+    
+    note right of WORKSPACE_NAME_GENERATION
+        Action: Generate workspace name
+        using Factory pattern
+    end note
+    
+    note right of TERRAFORM_INIT
+        Action: Initialize Terraform
+        Requires: workspace_name
+    end note
+    
+    note right of COMPLETED
+        Final success state
+    end note
+    
+    note right of ERROR
+        Final error state
+    end note
+```
+
+---
+
 ## Factory Pattern Detail
 
 This diagram shows how the Factory pattern creates different strategies.
@@ -488,6 +599,13 @@ flowchart TD
    - Concrete: `Workflow2TerraformTemplate`
    - Purpose: Define fixed algorithm structure with customizable steps
 
+5. **State Pattern** (Workflow 4)
+   - States: `TerraformStates` enum
+   - Events: `TerraformEvents` enum
+   - Actions: One action class per state
+   - Configuration: `TerraformStateMachineConfig`
+   - Purpose: Model workflow as state transitions
+
 ### Pattern Composition
 
 Workflow 1 demonstrates how multiple patterns work together:
@@ -504,4 +622,14 @@ The `TerraformContext` provides:
 3. **Validation**: Automatic checking of required attributes
 4. **Traceability**: Clear view of all attributes at any stage
 5. **Extensibility**: Easy to add new attributes without changing signatures
+
+### Pattern Comparison
+
+| Pattern | Workflow | Approach | Control Flow | Best For |
+|---------|----------|----------|--------------|----------|
+| **Chain of Responsibility** | Workflow 1 | Handlers linked together | Sequential, passes through chain | Processing pipeline with validation |
+| **Template Method** | Workflow 2 | Abstract algorithm, concrete steps | Fixed sequence in template | Algorithm with customizable steps |
+| **State Machine** | Workflow 4 | States + Events + Transitions | Event-driven state changes | Complex state management |
+
+All three patterns can achieve the same result - it's about choosing the right tool for your use case!
 

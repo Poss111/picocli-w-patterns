@@ -3,6 +3,7 @@ package com.example.workflow;
 import com.example.workflow.commands.Workflow1Command;
 import com.example.workflow.commands.Workflow2Command;
 import com.example.workflow.commands.Workflow3Command;
+import com.example.workflow.commands.Workflow4Command;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
 
@@ -15,7 +16,8 @@ import picocli.CommandLine.Command;
     subcommands = {
         Workflow1Command.class,
         Workflow2Command.class,
-        Workflow3Command.class
+        Workflow3Command.class,
+        Workflow4Command.class
     }
 )
 public class MainCommand implements Runnable {

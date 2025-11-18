@@ -6,7 +6,7 @@ A command-line interface tool built with Spring Boot and picocli for running wor
 
 ## Features
 
-- Three workflow commands (workflow1, workflow2, workflow3)
+- Four workflow commands (workflow1, workflow2, workflow3, workflow4)
 - **Workflow 1**: Terraform deployment pipeline using **Chain of Responsibility** + **Factory** + **Strategy** patterns
   - 6 stages: Workspace Name Generation, Init, Validate, Plan, Apply, Output
   - **Context Object**: Shared state passed between handlers
@@ -16,14 +16,19 @@ A command-line interface tool built with Spring Boot and picocli for running wor
 - **Workflow 2**: Terraform deployment pipeline using **Template Method** pattern
   - 5 stages: Init, Validate, Plan, Apply, Output
   - Abstract template defines the workflow skeleton with concrete implementations
-- Workflow 3: Simple workflow execution
+- **Workflow 3**: Simple workflow execution
+- **Workflow 4**: Terraform deployment pipeline using **Spring State Machine** pattern
+  - 6 states: Initial, Workspace Name Generation, Init, Validate, Plan, Apply, Output, Completed/Error
+  - Event-driven state transitions
+  - Actions associated with each state
+  - Same functionality as Workflow1 but state-driven
 - Each command accepts workflow name and time to run
 - **Built with Spring Boot for dependency injection**
   - All handlers and templates are Spring-managed beans
   - Constructor-based dependency injection for testability
   - Factory beans for runtime object creation
 - Uses picocli for elegant command-line parsing
-- Demonstrates Gang of Four design patterns (Chain of Responsibility, Template Method, Factory, Strategy)
+- Demonstrates Gang of Four design patterns (Chain of Responsibility, Template Method, Factory, Strategy, State)
 
 ## Prerequisites
 
@@ -99,6 +104,27 @@ The difference is in the **design pattern**: Template Method defines the algorit
 mvn spring-boot:run -Dspring-boot.run.arguments="workflow3 -n 'Report Generation' -t '14:00'"
 ```
 
+### Run Workflow 4 (Terraform State Machine)
+
+Workflow 4 executes the same Terraform deployment pipeline using Spring State Machine pattern:
+
+```bash
+# Default (timestamp-based workspace name)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow4 --name 'Infrastructure Deployment' --time 'now'"
+
+# Environment-based workspace name
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow4 -n 'Production Deploy' -t 'now' -s ENVIRONMENT -p production"
+
+# Custom prefix workspace name
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow4 -n 'VPC Setup' -t 'now' -s CUSTOM_PREFIX -p team-alpha"
+```
+
+This executes the same stages as Workflow1 but uses a **state-driven approach**:
+- States represent stages of the workflow
+- Events trigger transitions between states
+- Actions are executed when entering each state
+- State machine manages the workflow flow
+
 ## Running as Standalone JAR
 
 After building the project, you can run it as a standalone application:
@@ -133,20 +159,16 @@ java -jar target/workflow-cli-1.0.0.jar workflow1 --name "My Workflow" --time "n
 
 ```bash
 # Run Terraform with Chain of Responsibility + Factory patterns (workflow 1)
-# Default timestamp strategy
-java -jar target/workflow-cli-1.0.0.jar workflow1 -n "Production Deploy" -t "now"
-
-# With environment-based workspace naming
 java -jar target/workflow-cli-1.0.0.jar workflow1 -n "Production Deploy" -t "now" -s ENVIRONMENT -p production
 
-# With custom prefix workspace naming
-java -jar target/workflow-cli-1.0.0.jar workflow1 -n "VPC Setup" -t "now" -s CUSTOM_PREFIX -p team-alpha
-
-# Run Terraform deployment pipeline with Template Method (workflow 2)
+# Run Terraform with Template Method pattern (workflow 2)
 java -jar target/workflow-cli-1.0.0.jar workflow2 -n "Network Infrastructure" -t "now"
 
 # Run simple workflow 3
 java -jar target/workflow-cli-1.0.0.jar workflow3 -n "Monthly Cleanup" -t "01:00"
+
+# Run Terraform with Spring State Machine pattern (workflow 4)
+java -jar target/workflow-cli-1.0.0.jar workflow4 -n "Production Deploy" -t "now" -s ENVIRONMENT -p production
 ```
 
 ### Sample Output (Workflow 1)
@@ -423,6 +445,51 @@ Benefits:
 **Key Difference from Chain of Responsibility:**
 - Template Method: The algorithm structure is fixed in the abstract class; subclasses fill in the details
 - Chain of Responsibility: Handlers are independent and can be dynamically chained
+
+### State Machine Pattern (Workflow 4)
+
+Workflow 4 implements the State pattern using Spring State Machine:
+
+- **TerraformStates**: Enum defining all possible states
+- **TerraformEvents**: Enum defining events that trigger state transitions
+- **State Actions**: Each state has an associated action that executes when entering
+- **State Machine Configuration**: Defines valid transitions between states
+- **Extended State**: Context object stored in state machine for sharing data
+
+**States:**
+1. `INITIAL` - Starting state
+2. `WORKSPACE_NAME_GENERATION` - Generating workspace name
+3. `TERRAFORM_INIT` - Initializing Terraform
+4. `TERRAFORM_VALIDATE` - Validating configuration
+5. `TERRAFORM_PLAN` - Creating execution plan
+6. `TERRAFORM_APPLY` - Applying changes
+7. `TERRAFORM_OUTPUT` - Retrieving outputs
+8. `COMPLETED` - Successfully finished
+9. `ERROR` - Error occurred
+
+**Events:**
+- `START_WORKFLOW` - Begin the workflow
+- `WORKSPACE_NAME_GENERATED` - Transition to Init
+- `INIT_COMPLETED` - Transition to Validate
+- `VALIDATE_COMPLETED` - Transition to Plan
+- `PLAN_COMPLETED` - Transition to Apply
+- `APPLY_COMPLETED` - Transition to Output
+- `OUTPUT_COMPLETED` - Transition to Completed
+- `ERROR_OCCURRED` - Transition to Error state
+
+Benefits:
+- Clear state representation
+- Event-driven architecture
+- Explicit state transitions
+- Built-in state management
+- Easy to visualize workflow as state diagram
+- Decoupled state logic from business logic
+- Spring-managed state machine configuration
+
+**Key Differences:**
+- **State Machine vs Chain of Responsibility**: State machine is event-driven with explicit states; chain processes sequentially
+- **State Machine vs Template Method**: State machine allows dynamic transitions; template has fixed sequence
+- All three workflows achieve the same result using different patterns
 
 ---
 

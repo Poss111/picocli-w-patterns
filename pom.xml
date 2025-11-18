@@ -21,6 +21,7 @@
     <properties>
         <java.version>11</java.version>
         <picocli.version>4.7.5</picocli.version>
+        <spring-statemachine.version>3.2.0</spring-statemachine.version>
     </properties>
 
     <dependencies>
@@ -41,6 +42,13 @@
             <groupId>info.picocli</groupId>
             <artifactId>picocli-spring-boot-starter</artifactId>
             <version>${picocli.version}</version>
+        </dependency>
+
+        <!-- Spring State Machine -->
+        <dependency>
+            <groupId>org.springframework.statemachine</groupId>
+            <artifactId>spring-statemachine-core</artifactId>
+            <version>${spring-statemachine.version}</version>
         </dependency>
 
         <!-- Spring Boot Test -->
