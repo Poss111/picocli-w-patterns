@@ -1,6 +1,7 @@
 package com.example.workflow.commands;
 
 import com.example.workflow.factory.WorkspaceNameFactory;
+import com.example.workflow.factory.WorkspaceNameHandlerFactory;
 import com.example.workflow.handlers.*;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
@@ -13,6 +14,13 @@ import picocli.CommandLine.Option;
     mixinStandardHelpOptions = true
 )
 public class Workflow1Command implements Runnable {
+
+    private final WorkspaceNameHandlerFactory workspaceNameHandlerFactory;
+    private final TerraformInitHandler initHandler;
+    private final TerraformValidateHandler validateHandler;
+    private final TerraformPlanHandler planHandler;
+    private final TerraformApplyHandler applyHandler;
+    private final TerraformOutputHandler outputHandler;
 
     @Option(
         names = {"-n", "--name"},
@@ -40,28 +48,43 @@ public class Workflow1Command implements Runnable {
         description = "Strategy parameter (e.g., environment name for ENVIRONMENT, prefix for CUSTOM_PREFIX)"
     )
     private String strategyParameter;
+    
+    /**
+     * Constructor with dependency injection.
+     * Spring automatically injects all handler beans.
+     * @Autowired is optional when there's only one constructor.
+     */
+    public Workflow1Command(WorkspaceNameHandlerFactory workspaceNameHandlerFactory,
+                           TerraformInitHandler initHandler,
+                           TerraformValidateHandler validateHandler,
+                           TerraformPlanHandler planHandler,
+                           TerraformApplyHandler applyHandler,
+                           TerraformOutputHandler outputHandler) {
+        this.workspaceNameHandlerFactory = workspaceNameHandlerFactory;
+        this.initHandler = initHandler;
+        this.validateHandler = validateHandler;
+        this.planHandler = planHandler;
+        this.applyHandler = applyHandler;
+        this.outputHandler = outputHandler;
+    }
 
     @Override
     public void run() {
         System.out.println("═══════════════════════════════════════════════");
         System.out.println("  Workflow 1: Terraform Deployment Pipeline");
         System.out.println("  Chain of Responsibility + Factory Pattern");
+        System.out.println("  (Spring Boot Dependency Injection)");
         System.out.println("═══════════════════════════════════════════════");
         System.out.println("Workflow Name: " + workflowName);
         System.out.println("Scheduled Time: " + timeToRun);
         System.out.println("Naming Strategy: " + strategyType);
         System.out.println("═══════════════════════════════════════════════");
         
-        // Build the Chain of Responsibility with Factory-created handler
-        // Use factory pattern to create workspace name handler
-        TerraformHandler workspaceNameHandler = new WorkspaceNameHandler(strategyType, strategyParameter);
-        TerraformHandler initHandler = new TerraformInitHandler();
-        TerraformHandler validateHandler = new TerraformValidateHandler();
-        TerraformHandler planHandler = new TerraformPlanHandler();
-        TerraformHandler applyHandler = new TerraformApplyHandler();
-        TerraformHandler outputHandler = new TerraformOutputHandler();
+        // Use factory to create workspace name handler (cannot be Spring bean due to runtime parameters)
+        TerraformHandler workspaceNameHandler = workspaceNameHandlerFactory.create(strategyType, strategyParameter);
         
-        // Chain the handlers together - workspace name generation comes first
+        // Chain the Spring-managed handlers together
+        // Workspace name generation comes first, followed by injected handlers
         workspaceNameHandler.setNext(initHandler)
                            .setNext(validateHandler)
                            .setNext(planHandler)

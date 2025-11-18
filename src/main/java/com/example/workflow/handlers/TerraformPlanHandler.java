@@ -1,9 +1,12 @@
 package com.example.workflow.handlers;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Handler for Terraform plan stage.
  * Simulates 'terraform plan' command.
  */
+@Component
 public class TerraformPlanHandler extends TerraformHandler {
     
     @Override

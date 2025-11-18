@@ -13,6 +13,8 @@ import picocli.CommandLine.Option;
 )
 public class Workflow2Command implements Runnable {
 
+    private final Workflow2TerraformTemplate template;
+
     @Option(
         names = {"-n", "--name"},
         description = "Name of the workflow",
@@ -26,13 +28,19 @@ public class Workflow2Command implements Runnable {
         required = true
     )
     private String timeToRun;
+    
+    /**
+     * Constructor with dependency injection.
+     * Spring automatically injects the template bean.
+     * @Autowired is optional when there's only one constructor.
+     */
+    public Workflow2Command(Workflow2TerraformTemplate template) {
+        this.template = template;
+    }
 
     @Override
     public void run() {
-        // Create an instance of the template implementation
-        Workflow2TerraformTemplate template = new Workflow2TerraformTemplate();
-        
-        // Execute the workflow using the template method
+        // Execute the workflow using the injected template
         boolean success = template.executeWorkflow(workflowName, timeToRun);
         
         if (!success) {

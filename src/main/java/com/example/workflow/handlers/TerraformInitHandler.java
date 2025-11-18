@@ -1,9 +1,12 @@
 package com.example.workflow.handlers;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Handler for Terraform initialization stage.
  * Simulates 'terraform init' command.
  */
+@Component
 public class TerraformInitHandler extends TerraformHandler {
     
     @Override

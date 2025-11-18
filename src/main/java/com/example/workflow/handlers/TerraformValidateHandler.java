@@ -1,9 +1,12 @@
 package com.example.workflow.handlers;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Handler for Terraform validation stage.
  * Simulates 'terraform validate' command.
  */
+@Component
 public class TerraformValidateHandler extends TerraformHandler {
     
     @Override

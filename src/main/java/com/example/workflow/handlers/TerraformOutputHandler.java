@@ -1,9 +1,12 @@
 package com.example.workflow.handlers;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Handler for Terraform output stage.
  * Simulates 'terraform output' command and displays final results.
  */
+@Component
 public class TerraformOutputHandler extends TerraformHandler {
     
     @Override

@@ -16,7 +16,10 @@ A command-line interface tool built with Spring Boot and picocli for running wor
   - Abstract template defines the workflow skeleton with concrete implementations
 - Workflow 3: Simple workflow execution
 - Each command accepts workflow name and time to run
-- Built with Spring Boot for dependency injection
+- **Built with Spring Boot for dependency injection**
+  - All handlers and templates are Spring-managed beans
+  - Constructor-based dependency injection for testability
+  - Factory beans for runtime object creation
 - Uses picocli for elegant command-line parsing
 - Demonstrates Gang of Four design patterns (Chain of Responsibility, Template Method, Factory, Strategy)
 
@@ -394,6 +397,125 @@ Benefits:
 **Key Difference from Chain of Responsibility:**
 - Template Method: The algorithm structure is fixed in the abstract class; subclasses fill in the details
 - Chain of Responsibility: Handlers are independent and can be dynamically chained
+
+---
+
+## Spring Boot Dependency Injection
+
+This application leverages Spring Boot's powerful dependency injection capabilities to manage components and promote loose coupling.
+
+### Benefits of Using Spring DI
+
+1. **Testability**: Components can be easily mocked and tested in isolation
+2. **Loose Coupling**: Dependencies are injected rather than created internally
+3. **Lifecycle Management**: Spring manages bean creation and destruction
+4. **Configuration**: Easy to swap implementations without changing code
+5. **Maintainability**: Clear dependency relationships through constructor injection
+
+### Spring-Managed Components
+
+#### Handler Beans (Workflow 1)
+
+All Terraform handlers are registered as Spring beans:
+
+```java
+@Component
+public class TerraformInitHandler extends TerraformHandler { ... }
+
+@Component
+public class TerraformValidateHandler extends TerraformHandler { ... }
+
+@Component
+public class TerraformPlanHandler extends TerraformHandler { ... }
+
+@Component
+public class TerraformApplyHandler extends TerraformHandler { ... }
+
+@Component
+public class TerraformOutputHandler extends TerraformHandler { ... }
+```
+
+#### Template Bean (Workflow 2)
+
+The workflow template is also a Spring-managed bean:
+
+```java
+@Component
+public class Workflow2TerraformTemplate extends TerraformWorkflowTemplate { ... }
+```
+
+#### Factory Bean
+
+For components that need runtime parameters, we use a factory bean:
+
+```java
+@Component
+public class WorkspaceNameHandlerFactory {
+    public WorkspaceNameHandler create(StrategyType type, String parameter) {
+        return new WorkspaceNameHandler(type, parameter);
+    }
+}
+```
+
+### Constructor Injection
+
+Both workflow commands use constructor injection to receive their dependencies:
+
+**Workflow1Command:**
+```java
+@Component
+public class Workflow1Command implements Runnable {
+    private final WorkspaceNameHandlerFactory factory;
+    private final TerraformInitHandler initHandler;
+    private final TerraformValidateHandler validateHandler;
+    private final TerraformPlanHandler planHandler;
+    private final TerraformApplyHandler applyHandler;
+    private final TerraformOutputHandler outputHandler;
+    
+    // Constructor injection (no @Autowired needed with single constructor)
+    public Workflow1Command(WorkspaceNameHandlerFactory factory,
+                           TerraformInitHandler initHandler,
+                           TerraformValidateHandler validateHandler,
+                           TerraformPlanHandler planHandler,
+                           TerraformApplyHandler applyHandler,
+                           TerraformOutputHandler outputHandler) {
+        // Dependencies are injected by Spring
+        this.factory = factory;
+        this.initHandler = initHandler;
+        // ... etc
+    }
+}
+```
+
+**Workflow2Command:**
+```java
+@Component
+public class Workflow2Command implements Runnable {
+    private final Workflow2TerraformTemplate template;
+    
+    public Workflow2Command(Workflow2TerraformTemplate template) {
+        this.template = template;
+    }
+}
+```
+
+### Why Constructor Injection?
+
+- **Immutability**: Final fields ensure dependencies don't change
+- **Required Dependencies**: Constructor makes dependencies explicit and required
+- **Testability**: Easy to create instances with mock dependencies in tests
+- **Null Safety**: No risk of null dependencies if object construction succeeds
+
+### Integration with Picocli
+
+Spring Boot automatically integrates with picocli through the `picocli-spring-boot-starter` dependency, which:
+- Registers all `@Command` classes as Spring beans
+- Injects dependencies using Spring's IoC container
+- Manages the lifecycle of command beans
+
+This allows us to combine picocli's CLI capabilities with Spring's dependency injection seamlessly.
+
+---
 
 ## License
 

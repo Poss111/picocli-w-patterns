@@ -1,9 +1,12 @@
 package com.example.workflow.template;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Concrete implementation of TerraformWorkflowTemplate for Workflow 2.
  * Implements each stage of the Terraform workflow with specific behavior.
  */
+@Component
 public class Workflow2TerraformTemplate extends TerraformWorkflowTemplate {
     
     @Override
