@@ -1,6 +1,8 @@
 package com.example.workflow.template;
 
 import com.example.workflow.context.TerraformContext;
+import com.example.workflow.factory.WorkspaceNameFactory;
+import com.example.workflow.factory.WorkspaceNameStrategy;
 import com.example.workflow.template.exceptions.TerraformWorkflowException;
 import org.springframework.stereotype.Component;
 
@@ -108,7 +110,37 @@ public class Workflow2TerraformTemplate extends TerraformWorkflowTemplate {
     protected boolean init(TerraformContext context) {
         System.out.println("\n[Stage 1/5] Terraform Init");
         System.out.println("─────────────────────────────");
-        System.out.println("Initializing Terraform working directory...");
+        
+        // Generate workspace name using Factory + Strategy patterns
+        System.out.println("Generating workspace name using Factory pattern...");
+        
+        // Retrieve strategy type and parameter from context
+        String strategyTypeStr = context.getAttribute("strategy_type", String.class);
+        String strategyParameter = context.getAttribute("strategy_parameter", String.class);
+        
+        WorkspaceNameFactory.StrategyType strategyType = strategyTypeStr != null 
+            ? WorkspaceNameFactory.StrategyType.valueOf(strategyTypeStr)
+            : WorkspaceNameFactory.StrategyType.TIMESTAMP;
+        
+        // Use Factory to create the appropriate strategy
+        WorkspaceNameStrategy strategy;
+        if (strategyParameter != null && !strategyParameter.equals("N/A")) {
+            strategy = WorkspaceNameFactory.createStrategy(strategyType, strategyParameter);
+        } else {
+            strategy = WorkspaceNameFactory.createStrategy(strategyType);
+        }
+        
+        // Generate workspace name using the selected strategy
+        String workspaceName = strategy.generateWorkspaceName(context.getWorkflowName(), context.getTimeToRun());
+        
+        System.out.println("Strategy: " + strategy.getStrategyDescription());
+        System.out.println("Generated workspace name: " + workspaceName);
+        
+        // Store workspace name in context
+        context.setAttribute("workspace_name", workspaceName);
+        System.out.println("  [Context] Stored workspace name");
+        
+        System.out.println("\nInitializing Terraform working directory...");
         System.out.println("Configuring backend...");
         System.out.println("Downloading required providers...");
         

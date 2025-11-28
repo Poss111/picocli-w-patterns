@@ -6,16 +6,17 @@ A command-line interface tool built with Spring Boot and picocli for running wor
 
 ## Features
 
-- Three workflow commands (workflow1, workflow2, workflow3)
+- **Five workflow commands** demonstrating Template Method pattern extensibility
 - **Workflow 1**: Terraform deployment pipeline using **Chain of Responsibility** + **Factory** + **Strategy** patterns
   - 6 stages: Workspace Name Generation, Init, Validate, Plan, Apply, Output
   - **Context Object**: Shared state passed between handlers
   - **Input Validation**: Each handler validates required attributes before execution
   - Each handler processes its stage and passes control to the next
   - Factory pattern creates different workspace naming strategies
-- **Workflow 2**: Terraform deployment pipeline using **Template Method** pattern
-  - 5 stages: Init, Validate, Plan, Apply, Output
+- **Workflow 2**: Terraform deployment pipeline using **Template Method** + **Factory** + **Strategy** patterns
+  - 5 stages: Init (with workspace name generation), Validate, Plan, Apply, Output
   - Abstract template defines the workflow skeleton with concrete implementations
+  - **Workspace Name Generation**: Factory pattern creates strategies during Init stage
   - **Context Object**: Shared state passed between template stages
   - **Stage Dependencies**: Each stage can verify prerequisites from context
   - **Comprehensive Error Handling**:
@@ -24,14 +25,22 @@ A command-line interface tool built with Spring Boot and picocli for running wor
     - Error hooks for custom recovery
     - Cleanup/rollback hooks on failure
     - Configurable max retries
-- Workflow 3: Simple workflow execution
-- Each command accepts workflow name and time to run
+- **Workflow 3**: Simple workflow execution
+- **Workflow 5**: **Personal Developer** workflow - Demonstrates Template Method **extensibility**
+  - Fast, lightweight implementation for local development
+  - Minimal validation, local state, quick iteration
+  - ~1 second execution time
+- **Workflow 6**: **Enterprise** workflow - Demonstrates Template Method **extensibility**
+  - Production-grade with security, compliance, and audit trails
+  - Remote state, approval gates, comprehensive validation
+  - Full governance and rollback capabilities
 - **Built with Spring Boot for dependency injection**
   - All handlers and templates are Spring-managed beans
   - Constructor-based dependency injection for testability
   - Factory beans for runtime object creation
 - Uses picocli for elegant command-line parsing
 - Demonstrates Gang of Four design patterns (Chain of Responsibility, Template Method, Factory, Strategy)
+- **Shows Template Method's Open/Closed Principle**: Same template, different implementations
 
 ## Prerequisites
 
@@ -84,19 +93,22 @@ This will execute:
 4. **Terraform Apply** - Apply infrastructure changes
 5. **Terraform Output** - Display output values
 
-### Run Workflow 2 (Terraform Template with Error Handling)
+### Run Workflow 2 (Terraform Template with Error Handling + Factory)
 
-Workflow 2 executes the same Terraform deployment pipeline but using the Template Method pattern with comprehensive error handling:
+Workflow 2 executes the same Terraform deployment pipeline but using the Template Method pattern with comprehensive error handling and workspace naming strategies:
 
 ```bash
-# Default (2 retries for recoverable errors)
+# Default (timestamp-based workspace name, 2 retries for recoverable errors)
 mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 --name 'Network Infrastructure' --time 'now'"
 
-# With custom retry count
-mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Production Deploy' -t 'now' -r 3"
+# With environment-based workspace name
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Production Deploy' -t 'now' -s ENVIRONMENT -p production"
 
-# No retries
-mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Dev Deploy' -t 'now' --retries 0"
+# With custom prefix workspace name
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'VPC Setup' -t 'now' -s CUSTOM_PREFIX -p team-alpha -r 3"
+
+# With simple workspace name
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Dev Deploy' -t 'now' -s SIMPLE --retries 0"
 
 # Test error handling with simulated failures
 # Simulate Init failure (recoverable - will retry)
@@ -109,8 +121,15 @@ mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --
 mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure PLAN --failure-attempts 1"
 ```
 
+**Workspace Naming Strategies:**
+Same as Workflow 1:
+- `TIMESTAMP` (default): Generates names like `network-infrastructure-20241118-143022`
+- `ENVIRONMENT`: Generates names like `production-deploy-production` (requires `-p` parameter)
+- `CUSTOM_PREFIX`: Generates names like `team-alpha-vpc-setup` (requires `-p` parameter)
+- `SIMPLE`: Generates names like `network-infrastructure` (sanitized workflow name)
+
 This also executes:
-1. **Terraform Init** - Initialize and configure backend (recoverable errors)
+1. **Terraform Init** - Generate workspace name using Factory + Strategy patterns, then initialize and configure backend (recoverable errors)
 2. **Terraform Validate** - Check configuration syntax (non-recoverable errors)
 3. **Terraform Plan** - Generate and review execution plan (recoverable errors)
 4. **Terraform Apply** - Create/modify infrastructure resources (non-recoverable errors)
@@ -131,6 +150,65 @@ The difference is in the **design pattern**: Template Method defines the algorit
 ```bash
 mvn spring-boot:run -Dspring-boot.run.arguments="workflow3 -n 'Report Generation' -t '14:00'"
 ```
+
+### Run Workflow 5 (Personal Developer - Fast & Simple)
+
+Workflow 5 demonstrates the Template Method pattern's **extensibility** with a lightweight implementation optimized for personal developers:
+
+```bash
+# Quick local testing
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow5 -n 'Local Test' -t 'now'"
+
+# With custom retries
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow5 -n 'Quick Deploy' -r 0"
+```
+
+**Personal Developer Features:**
+- ⚡ **Fast execution** (~1 second total)
+- 🏠 **Local state** (terraform.tfstate)
+- ✅ **Minimal validation** (syntax check only)
+- 🚫 **No approval gates**
+- 💰 **Cost-optimized** (single dev resource)
+- 🎯 **Quick feedback** for rapid iteration
+
+Perfect for:
+- Local development and testing
+- Quick infrastructure experiments
+- Learning Terraform
+- Rapid prototyping
+
+### Run Workflow 6 (Enterprise - Secure & Compliant)
+
+Workflow 6 demonstrates the Template Method pattern's **extensibility** with a production-grade implementation for enterprise deployments:
+
+```bash
+# Production deployment
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow6 -n 'Production Infrastructure' --environment production --region us-east-1"
+
+# Staging deployment
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow6 -n 'Staging Deploy' --environment staging --region us-west-2"
+
+# With custom retries
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow6 -n 'Critical Deploy' -r 5 --environment production"
+```
+
+**Enterprise Features:**
+- 🔐 **Remote state** (S3 + DynamoDB locking)
+- ✅ **Comprehensive validation** (security, compliance, cost)
+- 🔍 **Security scanning** (4 automated checks)
+- 📋 **Compliance validation** (SOC 2, HIPAA, GDPR)
+- ✔️ **Approval workflow** (multi-level approvals)
+- 📊 **Audit trail** (full logging and notifications)
+- 💰 **Cost estimation** and budget validation
+- 🔄 **Rollback capabilities**
+- 🚨 **Incident management** integration
+
+Perfect for:
+- Production deployments
+- Regulated industries
+- Multi-team organizations
+- Compliance requirements
+- Enterprise governance
 
 ## Running as Standalone JAR
 
@@ -164,6 +242,12 @@ java -jar target/workflow-cli-1.0.0.jar workflow1 --name "My Workflow" --time "n
 
 ### Workflow 2 Additional Options
 
+- `-s, --strategy`: Workspace naming strategy (default: TIMESTAMP)
+  - `TIMESTAMP`: Adds timestamp to workspace name
+  - `ENVIRONMENT`: Uses environment name (requires `-p`)
+  - `CUSTOM_PREFIX`: Adds custom prefix (requires `-p`)
+  - `SIMPLE`: Uses sanitized workflow name only
+- `-p, --parameter`: Parameter for strategy (e.g., environment name or prefix)
 - `-r, --retries`: Maximum number of retries for recoverable errors (default: 2)
   - Range: 0-10
   - Only applies to recoverable errors (Init, Plan, Output stages)
@@ -176,6 +260,21 @@ java -jar target/workflow-cli-1.0.0.jar workflow1 --name "My Workflow" --time "n
 - `--failure-attempts`: Number of attempts before allowing success (default: fail all)
   - Use with `--simulate-failure` to test retry behavior
   - Example: `--failure-attempts 1` fails once, then succeeds
+
+### Workflow 5 (Personal Developer) Options
+
+- `-n, --name`: Name of the workflow (required)
+- `-t, --time`: Time to run (default: "now")
+- `-r, --retries`: Maximum retries (default: 1 for fast feedback)
+
+### Workflow 6 (Enterprise) Options
+
+- `-n, --name`: Name of the workflow (required)
+- `-t, --time`: Scheduled time to run (default: "now")
+- `-r, --retries`: Maximum retries (default: 3 for production reliability)
+- `--environment`: Target environment (default: "production")
+  - Values: production, staging
+- `--region`: AWS region for deployment (default: "us-east-1")
 
 ## Examples
 
@@ -617,10 +716,11 @@ Benefits:
 
 ### Template Method Pattern (Workflow 2)
 
-Workflow 2 implements the Template Method pattern to define the workflow algorithm structure with comprehensive error handling and context passing:
+Workflow 2 implements the Template Method pattern combined with Factory and Strategy patterns to define the workflow algorithm structure with comprehensive error handling and flexible workspace naming:
 
 - **TerraformWorkflowTemplate**: Abstract class defining the template method (`executeWorkflow`)
 - **Template Method**: Defines the invariant workflow skeleton (init → validate → plan → apply → output)
+- **Factory + Strategy Integration**: Init stage uses Factory pattern to create workspace naming strategies
 - **Context Passing**: `TerraformContext` is passed through all stages
 - **Abstract Methods**: Each stage is an abstract method accepting context that must be implemented by subclasses
 - **Stage Dependencies**: Each stage can verify prerequisites from context before execution
@@ -662,6 +762,7 @@ Benefits:
 - Prevents subclasses from changing the workflow sequence
 - Promotes code reuse through inheritance
 - Allows customization of specific steps while maintaining overall structure
+- **Integrates Factory and Strategy patterns for flexible workspace naming**
 - **Shared state through context object**
 - **Stage prerequisite validation**
 - **Built-in error handling with retry logic**
@@ -669,16 +770,34 @@ Benefits:
 - **Automatic cleanup on failure**
 - Easy to create new workflows by extending the template
 
+**Workspace Name Generation in Init Stage:**
+```java
+// In Workflow2TerraformTemplate.init():
+// 1. Retrieve strategy type and parameter from context
+String strategyTypeStr = context.getAttribute("strategy_type", String.class);
+String strategyParameter = context.getAttribute("strategy_parameter", String.class);
+
+// 2. Use Factory to create the appropriate strategy
+WorkspaceNameStrategy strategy = WorkspaceNameFactory.createStrategy(strategyType, strategyParameter);
+
+// 3. Generate workspace name
+String workspaceName = strategy.generateWorkspaceName(workflowName, timeToRun);
+
+// 4. Store in context for later stages
+context.setAttribute("workspace_name", workspaceName);
+```
+
 **Context Passing:**
 The `TerraformContext` object allows stages to:
 - Share state and data between stages
-- Store intermediate results (e.g., resource IDs, provider versions)
+- Store intermediate results (e.g., resource IDs, provider versions, workspace name)
 - Verify prerequisites before execution
 - Maintain workflow metadata throughout execution
 
 **Example:**
 ```java
 // Init stage stores data in context
+context.setAttribute("workspace_name", "production-deploy-prod");
 context.setAttribute("providers_initialized", true);
 context.setAttribute("vpc_id", "vpc-abc123");
 
@@ -696,7 +815,120 @@ String vpcId = context.getAttribute("vpc_id", String.class);
 - Template Method: The algorithm structure is fixed in the abstract class; subclasses fill in the details
 - Chain of Responsibility: Handlers are independent and can be dynamically chained
 - Template Method has built-in error handling and retry logic at the framework level
-- Both patterns now support context passing for shared state
+- Both patterns now support:
+  - Factory and Strategy patterns for workspace naming
+  - Context passing for shared state
+
+---
+
+## Template Method Pattern: Open for Extension
+
+The Template Method pattern demonstrates the **Open/Closed Principle**: open for extension, closed for modification. Workflows 2, 5, and 6 all extend the same `TerraformWorkflowTemplate` base class but provide completely different implementations suited to their use cases.
+
+### Three Implementations, One Template
+
+| Feature | Workflow 2 (Standard) | Workflow 5 (Personal Dev) | Workflow 6 (Enterprise) |
+|---------|----------------------|--------------------------|-------------------------|
+| **Target Audience** | General use | Individual developers | Large organizations |
+| **Init Method** | **Shared implementation** | **Shared implementation** | **Shared implementation** |
+| **Execution Speed** | Medium (~4s) | Fast (~1s) | Thorough (~10s) |
+| **State Storage** | Configurable | Local file | Remote S3 + DynamoDB |
+| **Validation Level** | Standard | Minimal (syntax only) | Comprehensive (security + compliance) |
+| **Approval Process** | None | None | Multi-level approvals |
+| **Error Handling** | Basic retry | Quick retry | Full incident management |
+| **Cost Estimation** | Optional | None | Required with budget checks |
+| **Audit Trail** | Basic | None | Full CloudWatch logging |
+| **Rollback** | Manual | Manual | Automated + 24hr window |
+| **Compliance** | None | None | SOC 2, HIPAA, GDPR |
+| **Notifications** | Console only | Console only | Slack, Email, ServiceNow |
+
+**Key Insight:** All three workflows **share the same `init()` implementation** from the base template! This demonstrates Template Method's selective override capability - you only override what needs to be different.
+
+The shared `init()` method provides:
+- ✓ Workspace name generation using Factory + Strategy patterns
+- ✓ Standard provider initialization (AWS, Random)
+- ✓ Backend configuration
+- ✓ Context storage of initialization metadata
+
+This means Workflows 2, 5, and 6 only override 4 methods each (validate, plan, apply, output), while all using the same initialization logic.
+
+### How Extensibility Works
+
+All three workflows extend the same base template, but only override the methods they need to customize.
+
+**Shared Implementation (Not Overridden):**
+- `init(TerraformContext context)` - **All workflows use the shared init from base template**
+  - Workspace name generation via Factory + Strategy
+  - Provider initialization (AWS v5.0.0, Random v3.5.0)
+  - Backend configuration
+  - Context storage
+
+**Customized Implementations (Overridden):**
+```java
+protected abstract boolean validate(TerraformContext context);
+protected abstract boolean plan(TerraformContext context);
+protected abstract boolean apply(TerraformContext context);
+protected abstract boolean output(TerraformContext context);
+```
+
+Each workflow provides completely different implementations for these 4 methods:
+
+**Personal Dev** focuses on speed:
+- Init: **Uses shared implementation** (Factory + Strategy + standard providers)
+- Validate: Syntax check only
+- Plan: No approval required
+- Apply: Single dev-tier resource
+- Output: Minimal output, local endpoint
+
+**Enterprise** focuses on governance:
+- Init: **Uses shared implementation** (Factory + Strategy + standard providers)
+- Validate: Security scans (4 checks) + compliance validation (SOC 2, HIPAA, GDPR) + cost estimation
+- Plan: Change request creation + multi-level approval workflow
+- Apply: Blue/green deployment + health checks + stakeholder notifications
+- Output: Full documentation + audit trail + post-deployment monitoring
+
+### Benefits of This Approach
+
+1. **Code Reuse**: The template method handles the workflow skeleton, error handling, retry logic, **and shared init logic**
+2. **Consistency**: All implementations follow the same 5-stage process with consistent initialization
+3. **Flexibility**: Each implementation can customize only what needs to be different
+4. **Selective Override**: Not all methods need to be overridden - use shared implementations where appropriate
+5. **Type Safety**: Compile-time checking ensures required methods are implemented
+6. **Easy to Extend**: Adding a new workflow type only requires extending the template and overriding specific methods
+7. **No Duplication**: Common logic (retries, hooks, context passing, **initialization**) lives in the base class
+
+### Adding Your Own Implementation
+
+To create a new workflow implementation, you only need to override the methods that require customization:
+
+```java
+@Component
+public class MyCustomTemplate extends TerraformWorkflowTemplate {
+    // DON'T override init() - use the shared implementation!
+    // init() is already provided and includes:
+    //   - Workspace name generation
+    //   - Provider setup
+    //   - Backend configuration
+    
+    // Override only the 4 methods that need custom behavior:
+    protected boolean validate(TerraformContext context) { /* your logic */ }
+    protected boolean plan(TerraformContext context) { /* your logic */ }
+    protected boolean apply(TerraformContext context) { /* your logic */ }
+    protected boolean output(TerraformContext context) { /* your logic */ }
+    
+    // Optionally override hooks for customization:
+    protected void printHeader() { /* custom header */ }
+    protected void onStageError(...) { /* custom error handling */ }
+}
+```
+
+The template automatically provides:
+- ✓ Error handling with retry logic
+- ✓ Context passing between stages
+- ✓ **Shared init with workspace naming**
+- ✓ Hook methods for customization
+- ✓ Consistent workflow structure
+- ✓ Spring DI integration
 
 ---
 

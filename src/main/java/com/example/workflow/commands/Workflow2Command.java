@@ -1,6 +1,7 @@
 package com.example.workflow.commands;
 
 import com.example.workflow.context.TerraformContext;
+import com.example.workflow.factory.WorkspaceNameFactory;
 import com.example.workflow.template.Workflow2TerraformTemplate;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
@@ -50,6 +51,19 @@ public class Workflow2Command implements Runnable {
     )
     private int failureAttempts;
     
+    @Option(
+        names = {"-s", "--strategy"},
+        description = "Workspace naming strategy: ENVIRONMENT, TIMESTAMP, CUSTOM_PREFIX, SIMPLE (default: TIMESTAMP)",
+        defaultValue = "TIMESTAMP"
+    )
+    private WorkspaceNameFactory.StrategyType strategyType;
+    
+    @Option(
+        names = {"-p", "--parameter"},
+        description = "Strategy parameter (e.g., environment name for ENVIRONMENT, prefix for CUSTOM_PREFIX)"
+    )
+    private String strategyParameter;
+    
     /**
      * Constructor with dependency injection.
      * Spring automatically injects the template bean.
@@ -74,8 +88,14 @@ public class Workflow2Command implements Runnable {
             context.setAttribute("environment", "production");
             context.setAttribute("region", "us-east-1");
             context.setAttribute("pattern", "Template Method");
+            context.setAttribute("strategy_type", strategyType.toString());
+            context.setAttribute("strategy_parameter", strategyParameter != null ? strategyParameter : "N/A");
             
             System.out.println("Created context with initial attributes: " + context.getAttributeKeys());
+            System.out.println("Workspace Strategy: " + strategyType);
+            if (strategyParameter != null) {
+                System.out.println("Strategy Parameter: " + strategyParameter);
+            }
             System.out.println("═══════════════════════════════════════════════\n");
             
             // Configure retry settings

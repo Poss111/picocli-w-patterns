@@ -1,6 +1,8 @@
 package com.example.workflow.template;
 
 import com.example.workflow.context.TerraformContext;
+import com.example.workflow.factory.WorkspaceNameFactory;
+import com.example.workflow.factory.WorkspaceNameStrategy;
 import com.example.workflow.template.exceptions.*;
 
 /**
@@ -249,12 +251,74 @@ public abstract class TerraformWorkflowTemplate {
     // Abstract methods - must be implemented by concrete classes
     
     /**
-     * Terraform Init stage - must be implemented by subclasses.
+     * Terraform Init stage - provides a shared implementation that can be used by all workflows.
+     * This method demonstrates code reuse in the Template Method pattern.
+     * Subclasses can override this if they need custom initialization behavior.
+     * 
+     * Default implementation:
+     * - Generates workspace name using Factory + Strategy patterns
+     * - Initializes Terraform with standard providers
+     * - Configures backend
+     * - Stores initialization metadata in context
      * 
      * @param context the shared context object
      * @return true if init succeeded, false otherwise
      */
-    protected abstract boolean init(TerraformContext context);
+    protected boolean init(TerraformContext context) {
+        System.out.println("\n[Stage 1/5] Terraform Init (Shared Implementation)");
+        System.out.println("─────────────────────────────");
+        
+        // Generate workspace name using Factory + Strategy patterns
+        System.out.println("▸ Generating workspace name using Factory pattern...");
+        
+        // Retrieve strategy type and parameter from context
+        String strategyTypeStr = context.getAttribute("strategy_type", String.class);
+        String strategyParameter = context.getAttribute("strategy_parameter", String.class);
+        
+        WorkspaceNameFactory.StrategyType strategyType = strategyTypeStr != null 
+            ? WorkspaceNameFactory.StrategyType.valueOf(strategyTypeStr)
+            : WorkspaceNameFactory.StrategyType.TIMESTAMP;
+        
+        // Use Factory to create the appropriate strategy
+        WorkspaceNameStrategy strategy;
+        if (strategyParameter != null && !strategyParameter.equals("N/A")) {
+            strategy = WorkspaceNameFactory.createStrategy(strategyType, strategyParameter);
+        } else {
+            strategy = WorkspaceNameFactory.createStrategy(strategyType);
+        }
+        
+        // Generate workspace name using the selected strategy
+        String workspaceName = strategy.generateWorkspaceName(context.getWorkflowName(), context.getTimeToRun());
+        
+        System.out.println("  Strategy: " + strategy.getStrategyDescription());
+        System.out.println("  Workspace: " + workspaceName);
+        
+        // Store workspace name in context
+        context.setAttribute("workspace_name", workspaceName);
+        System.out.println("  [Context] Stored workspace name");
+        
+        System.out.println("\n▸ Initializing Terraform...");
+        System.out.println("  Downloading providers...");
+        
+        try {
+            Thread.sleep(500);
+            System.out.println("  • provider registry.terraform.io/hashicorp/aws v5.0.0");
+            System.out.println("  • provider registry.terraform.io/hashicorp/random v3.5.0");
+            
+            // Store initialization info in context
+            context.setAttribute("providers_initialized", true);
+            context.setAttribute("aws_provider_version", "5.0.0");
+            context.setAttribute("backend_configured", true);
+            
+            System.out.println("✓ Terraform initialized successfully!");
+            System.out.println("  [Context] Stored initialization metadata");
+            return true;
+        } catch (InterruptedException e) {
+            System.err.println("✗ Init failed: " + e.getMessage());
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
     
     /**
      * Terraform Validate stage - must be implemented by subclasses.

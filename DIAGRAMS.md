@@ -30,6 +30,8 @@ classDiagram
     class Workflow2Command {
         -String workflowName
         -String timeToRun
+        -StrategyType strategyType
+        -String strategyParameter
         +run()
     }
     
@@ -196,6 +198,8 @@ classDiagram
     TerraformWorkflowTemplate <|-- Workflow2TerraformTemplate
     TerraformWorkflowTemplate --> TerraformContext : uses
     Workflow2Command --> TerraformContext : creates
+    Workflow2TerraformTemplate --> WorkspaceNameFactory : uses
+    Workflow2TerraformTemplate --> WorkspaceNameStrategy : uses
 ```
 
 ---
@@ -542,28 +546,43 @@ flowchart TD
    - Purpose: Process Terraform stages sequentially, stopping on failure
    - **Enhancement**: Context passing and input validation
 
-2. **Factory Pattern** (Workflow 1)
+2. **Factory Pattern** (Workflow 1 & Workflow 2)
    - Factory: `WorkspaceNameFactory`
    - Purpose: Create appropriate workspace naming strategy based on user input
+   - Used in both workflows for consistent workspace name generation
 
-3. **Strategy Pattern** (Workflow 1)
+3. **Strategy Pattern** (Workflow 1 & Workflow 2)
    - Interface: `WorkspaceNameStrategy`
    - Strategies: `EnvironmentBasedStrategy`, `TimestampBasedStrategy`, `CustomPrefixStrategy`, `SimpleStrategy`
    - Purpose: Allow runtime selection of workspace naming algorithm
+   - Used in both workflows for flexible naming
 
 4. **Template Method Pattern** (Workflow 2)
    - Template: `TerraformWorkflowTemplate` (abstract)
    - Concrete: `Workflow2TerraformTemplate`
    - Purpose: Define fixed algorithm structure with customizable steps
    - **Enhancement**: Context passing for shared state between stages
+   - **Integration**: Uses Factory and Strategy patterns in Init stage for workspace naming
 
 ### Pattern Composition
 
-Workflow 1 demonstrates how multiple patterns work together:
+**Workflow 1** demonstrates how multiple patterns work together:
 - **WorkspaceNameHandler** (part of Chain of Responsibility) uses **WorkspaceNameFactory** (Factory pattern) to create a **WorkspaceNameStrategy** (Strategy pattern)
 - **TerraformContext** is passed through the entire chain, allowing handlers to share state
 - **Input Validation** ensures each handler has required data before execution
 - This shows how design patterns compose to create flexible, maintainable solutions
+
+**Workflow 2** demonstrates pattern integration with Template Method:
+- **Init Stage** (part of Template Method) uses **WorkspaceNameFactory** (Factory pattern) to create a **WorkspaceNameStrategy** (Strategy pattern)
+- **TerraformContext** is passed through all stages, allowing state sharing
+- **Prerequisite Validation** ensures each stage has required data before execution
+- This shows how Factory and Strategy patterns can be integrated within Template Method
+
+**Common Elements:**
+- Both workflows use the same Factory and Strategy pattern implementations for workspace naming
+- Both workflows use TerraformContext for state management
+- Both workflows validate dependencies before execution
+- Different patterns (Chain of Responsibility vs. Template Method) can leverage the same sub-patterns
 
 ### Context Object Benefits
 
