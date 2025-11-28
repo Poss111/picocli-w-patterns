@@ -5,7 +5,8 @@ This document contains class diagrams and flow diagrams for the Workflow CLI app
 ## Table of Contents
 - [Overall Class Diagram](#overall-class-diagram)
 - [Workflow 1 Flow (Chain of Responsibility + Factory + Strategy)](#workflow-1-flow-chain-of-responsibility--factory--strategy)
-- [Workflow 2 Flow (Template Method)](#workflow-2-flow-template-method)
+- [Workflow 2 Flow (Template Method with Error Handling)](#workflow-2-flow-template-method-with-error-handling)
+- [Error Handling Flow (Workflow 2)](#error-handling-flow-workflow-2)
 - [Factory Pattern Detail](#factory-pattern-detail)
 - [Strategy Pattern Detail](#strategy-pattern-detail)
 
@@ -138,23 +139,24 @@ classDiagram
         <<abstract>>
         #String workflowName
         #String timeToRun
-        +executeWorkflow(String, String) boolean
+        #TerraformContext context
+        +executeWorkflow(String, String, TerraformContext) boolean
         #printHeader()
         #printFooter(boolean)
-        #init() boolean*
-        #validate() boolean*
-        #plan() boolean*
-        #apply() boolean*
-        #output() boolean*
+        #init(TerraformContext) boolean*
+        #validate(TerraformContext) boolean*
+        #plan(TerraformContext) boolean*
+        #apply(TerraformContext) boolean*
+        #output(TerraformContext) boolean*
     }
     
     class Workflow2TerraformTemplate {
         #printHeader()
-        #init() boolean
-        #validate() boolean
-        #plan() boolean
-        #apply() boolean
-        #output() boolean
+        #init(TerraformContext) boolean
+        #validate(TerraformContext) boolean
+        #plan(TerraformContext) boolean
+        #apply(TerraformContext) boolean
+        #output(TerraformContext) boolean
     }
     
     %% Relationships - Chain of Responsibility
@@ -192,6 +194,8 @@ classDiagram
     
     %% Relationships - Template Method
     TerraformWorkflowTemplate <|-- Workflow2TerraformTemplate
+    TerraformWorkflowTemplate --> TerraformContext : uses
+    Workflow2Command --> TerraformContext : creates
 ```
 
 ---
@@ -273,43 +277,107 @@ sequenceDiagram
 
 ---
 
-## Workflow 2 Flow (Template Method)
+## Workflow 2 Flow (Template Method with Error Handling + Context)
 
-This sequence diagram shows the execution flow of Workflow 2 using the Template Method pattern.
+This sequence diagram shows the execution flow of Workflow 2 using the Template Method pattern with comprehensive error handling and context passing.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant W2 as Workflow2Command
-    participant Template as Workflow2TerraformTemplate
+    participant Ctx as TerraformContext
+    participant Template as TerraformWorkflowTemplate
+    participant Concrete as Workflow2TerraformTemplate
     
     User->>W2: run()
-    W2->>Template: new Workflow2TerraformTemplate()
-    W2->>Template: executeWorkflow(workflowName, timeToRun)
+    W2->>Ctx: new TerraformContext(workflowName, timeToRun)
+    W2->>Ctx: setAttribute("environment", "production")
+    W2->>Ctx: setAttribute("region", "us-east-1")
+    W2->>Template: setMaxRetries(2)
+    W2->>Template: enableFailureSimulation(stage, attempts)
+    W2->>Template: executeWorkflow(workflowName, timeToRun, context)
     
-    Note over Template: Template Method Pattern
+    Note over Template: Template Method Pattern with Context
     Template->>Template: printHeader()
     
-    Note over Template: Fixed Algorithm Structure
-    Template->>Template: init()
-    Note right of Template: Stage 1/5<br/>Initialize Terraform
+    Note over Template,Concrete: Error Handling with Retry + Context Passing
+    loop For each stage
+        Template->>Template: executeWithRetry(stage)
+        Template->>Concrete: Execute stage with context<br/>(init/validate/plan/apply/output)
+        
+        Note over Concrete: Stage uses context
+        Concrete->>Ctx: Verify prerequisites (e.g., providers_initialized)
+        Concrete->>Ctx: Execute stage logic
+        Concrete->>Ctx: Store results (e.g., vpc_id, resource counts)
+        
+        alt Stage Succeeds
+            Concrete-->>Template: return true
+        else Stage Fails (Missing Prerequisites)
+            Concrete-->>Template: return false (validation failed)
+            Template->>Template: handleError(exception)
+            Template->>Concrete: cleanup(exception)
+            Template->>Template: printFooter(false)
+            Template-->>W2: return false
+        else Stage Fails (Exception)
+            Concrete-->>Template: throw exception
+            Template->>Template: Check if recoverable
+            
+            alt Recoverable & Retries Left
+                Template->>Concrete: onStageError(exception, attempt)
+                Template->>Template: Wait (exponential backoff)
+                Template->>Concrete: Retry stage with context
+            else Not Recoverable or Max Retries
+                Template->>Template: handleError(exception)
+                Template->>Concrete: cleanup(exception)
+                Template->>Template: printFooter(false)
+                Template-->>W2: return false
+            end
+        end
+    end
     
-    Template->>Template: validate()
-    Note right of Template: Stage 2/5<br/>Validate configuration
-    
-    Template->>Template: plan()
-    Note right of Template: Stage 3/5<br/>Create execution plan
-    
-    Template->>Template: apply()
-    Note right of Template: Stage 4/5<br/>Apply changes
-    
-    Template->>Template: output()
-    Note right of Template: Stage 5/5<br/>Display outputs
-    
-    Template->>Template: printFooter(success)
-    Template-->>W2: return success
-    
+    Template->>Template: printFooter(true)
+    Template-->>W2: return true
+    W2->>Ctx: getAttributeKeys() (display final state)
     W2-->>User: Workflow completed
+```
+
+---
+
+## Error Handling Flow (Workflow 2)
+
+This flowchart shows the error handling and retry logic in the Template Method pattern.
+
+```mermaid
+flowchart TD
+    Start([Execute Stage]) --> Try[Try Execute Stage]
+    Try --> Success{Success?}
+    
+    Success -->|Yes| Next([Continue to Next Stage])
+    Success -->|No| Exception[Exception Thrown]
+    
+    Exception --> Recoverable{Recoverable<br/>Error?}
+    
+    Recoverable -->|No| HandleError[handleError hook]
+    HandleError --> Cleanup[cleanup hook]
+    Cleanup --> FailEnd([Workflow Failed])
+    
+    Recoverable -->|Yes| CheckRetries{Retries<br/>Left?}
+    
+    CheckRetries -->|No| HandleError
+    CheckRetries -->|Yes| ErrorHook[onStageError hook]
+    
+    ErrorHook --> Wait[Wait with<br/>Exponential Backoff<br/>2s → 4s → 6s]
+    Wait --> Retry[Retry Stage]
+    Retry --> Try
+    
+    style Start fill:#e1f5ff,stroke:#333,stroke-width:2px
+    style Next fill:#d4edda,stroke:#333,stroke-width:2px
+    style FailEnd fill:#f8d7da,stroke:#333,stroke-width:2px
+    style Success fill:#fff3cd,stroke:#333,stroke-width:2px
+    style Recoverable fill:#fff3cd,stroke:#333,stroke-width:2px
+    style CheckRetries fill:#fff3cd,stroke:#333,stroke-width:2px
+    style ErrorHook fill:#d1ecf1,stroke:#333,stroke-width:2px
+    style Cleanup fill:#f8d7da,stroke:#333,stroke-width:2px
 ```
 
 ---
@@ -487,6 +555,7 @@ flowchart TD
    - Template: `TerraformWorkflowTemplate` (abstract)
    - Concrete: `Workflow2TerraformTemplate`
    - Purpose: Define fixed algorithm structure with customizable steps
+   - **Enhancement**: Context passing for shared state between stages
 
 ### Pattern Composition
 
@@ -498,10 +567,69 @@ Workflow 1 demonstrates how multiple patterns work together:
 
 ### Context Object Benefits
 
-The `TerraformContext` provides:
-1. **Shared State**: Handlers can store and retrieve data
+The `TerraformContext` is used by both patterns and provides:
+1. **Shared State**: Handlers/stages can store and retrieve data
 2. **Type Safety**: Generic `getAttribute()` with type parameter
-3. **Validation**: Automatic checking of required attributes
-4. **Traceability**: Clear view of all attributes at any stage
-5. **Extensibility**: Easy to add new attributes without changing signatures
+3. **Validation**: Automatic checking of required attributes (Chain of Responsibility)
+4. **Prerequisite Checking**: Stages verify required data exists (Template Method)
+5. **Traceability**: Clear view of all attributes at any stage
+6. **Extensibility**: Easy to add new attributes without changing signatures
+7. **Pattern Agnostic**: Same context class works with different patterns
+
+---
+
+## Exception Hierarchy (Workflow 2)
+
+This diagram shows the custom exception hierarchy for error handling in the Template Method pattern.
+
+```mermaid
+classDiagram
+    class Exception {
+        <<Java Built-in>>
+    }
+    
+    class TerraformWorkflowException {
+        -String stage
+        -boolean recoverable
+        +getStage() String
+        +isRecoverable() boolean
+        +toString() String
+    }
+    
+    class InitializationException {
+        +InitializationException(String)
+        +InitializationException(String, Throwable)
+    }
+    
+    class ValidationException {
+        +ValidationException(String)
+        +ValidationException(String, Throwable)
+    }
+    
+    class PlanningException {
+        +PlanningException(String)
+        +PlanningException(String, Throwable)
+    }
+    
+    class ApplyException {
+        +ApplyException(String)
+        +ApplyException(String, Throwable)
+    }
+    
+    class OutputException {
+        +OutputException(String)
+        +OutputException(String, Throwable)
+    }
+    
+    Exception <|-- TerraformWorkflowException
+    TerraformWorkflowException <|-- InitializationException : recoverable=true
+    TerraformWorkflowException <|-- ValidationException : recoverable=false
+    TerraformWorkflowException <|-- PlanningException : recoverable=true
+    TerraformWorkflowException <|-- ApplyException : recoverable=false
+    TerraformWorkflowException <|-- OutputException : recoverable=true
+    
+    note for TerraformWorkflowException "Base exception with<br/>stage context and<br/>recoverable flag"
+    note for InitializationException "Recoverable<br/>Retries allowed"
+    note for ValidationException "Non-recoverable<br/>Fails immediately"
+```
 

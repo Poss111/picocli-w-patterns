@@ -16,6 +16,14 @@ A command-line interface tool built with Spring Boot and picocli for running wor
 - **Workflow 2**: Terraform deployment pipeline using **Template Method** pattern
   - 5 stages: Init, Validate, Plan, Apply, Output
   - Abstract template defines the workflow skeleton with concrete implementations
+  - **Context Object**: Shared state passed between template stages
+  - **Stage Dependencies**: Each stage can verify prerequisites from context
+  - **Comprehensive Error Handling**:
+    - Custom exceptions for each stage
+    - Automatic retry logic for recoverable errors
+    - Error hooks for custom recovery
+    - Cleanup/rollback hooks on failure
+    - Configurable max retries
 - Workflow 3: Simple workflow execution
 - Each command accepts workflow name and time to run
 - **Built with Spring Boot for dependency injection**
@@ -76,22 +84,47 @@ This will execute:
 4. **Terraform Apply** - Apply infrastructure changes
 5. **Terraform Output** - Display output values
 
-### Run Workflow 2 (Terraform Template)
+### Run Workflow 2 (Terraform Template with Error Handling)
 
-Workflow 2 executes the same Terraform deployment pipeline but using the Template Method pattern:
+Workflow 2 executes the same Terraform deployment pipeline but using the Template Method pattern with comprehensive error handling:
 
 ```bash
+# Default (2 retries for recoverable errors)
 mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 --name 'Network Infrastructure' --time 'now'"
+
+# With custom retry count
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Production Deploy' -t 'now' -r 3"
+
+# No retries
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Dev Deploy' -t 'now' --retries 0"
+
+# Test error handling with simulated failures
+# Simulate Init failure (recoverable - will retry)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure INIT"
+
+# Simulate Validate failure (non-recoverable - fails immediately)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure VALIDATE"
+
+# Simulate Plan failure once, then succeed (tests retry logic)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure PLAN --failure-attempts 1"
 ```
 
 This also executes:
-1. **Terraform Init** - Initialize and configure backend
-2. **Terraform Validate** - Check configuration syntax
-3. **Terraform Plan** - Generate and review execution plan
-4. **Terraform Apply** - Create/modify infrastructure resources
-5. **Terraform Output** - Retrieve and display outputs
+1. **Terraform Init** - Initialize and configure backend (recoverable errors)
+2. **Terraform Validate** - Check configuration syntax (non-recoverable errors)
+3. **Terraform Plan** - Generate and review execution plan (recoverable errors)
+4. **Terraform Apply** - Create/modify infrastructure resources (non-recoverable errors)
+5. **Terraform Output** - Retrieve and display outputs (recoverable errors)
 
-The difference is in the **design pattern**: Template Method defines the algorithm structure in an abstract class, while concrete subclass implements each step.
+**Error Handling Features:**
+- Custom exceptions for each stage type
+- Automatic retry for recoverable errors (Init, Plan, Output)
+- Non-recoverable errors fail immediately (Validate, Apply)
+- Error hooks called before each retry
+- Cleanup hooks called on final failure
+- Detailed error reporting with stage information
+
+The difference is in the **design pattern**: Template Method defines the algorithm structure in an abstract class, while concrete subclass implements each step. Error handling is built into the template.
 
 ### Run Workflow 3
 
@@ -129,6 +162,21 @@ java -jar target/workflow-cli-1.0.0.jar workflow1 --name "My Workflow" --time "n
   - `SIMPLE`: Uses sanitized workflow name only
 - `-p, --parameter`: Parameter for strategy (e.g., environment name or prefix)
 
+### Workflow 2 Additional Options
+
+- `-r, --retries`: Maximum number of retries for recoverable errors (default: 2)
+  - Range: 0-10
+  - Only applies to recoverable errors (Init, Plan, Output stages)
+  - Validation and Apply errors fail immediately
+
+**Testing/Debugging Options:**
+- `--simulate-failure`: Force a failure at a specific stage for testing
+  - Values: `INIT`, `VALIDATE`, `PLAN`, `APPLY`, `OUTPUT`
+  - Useful for testing error handling and retry logic
+- `--failure-attempts`: Number of attempts before allowing success (default: fail all)
+  - Use with `--simulate-failure` to test retry behavior
+  - Example: `--failure-attempts 1` fails once, then succeeds
+
 ## Examples
 
 ```bash
@@ -144,6 +192,12 @@ java -jar target/workflow-cli-1.0.0.jar workflow1 -n "VPC Setup" -t "now" -s CUS
 
 # Run Terraform deployment pipeline with Template Method (workflow 2)
 java -jar target/workflow-cli-1.0.0.jar workflow2 -n "Network Infrastructure" -t "now"
+
+# Test error handling - simulate recoverable failure with retry
+java -jar target/workflow-cli-1.0.0.jar workflow2 -n "Test" -t "now" --simulate-failure INIT --failure-attempts 1 -r 3
+
+# Test error handling - simulate non-recoverable failure
+java -jar target/workflow-cli-1.0.0.jar workflow2 -n "Test" -t "now" --simulate-failure VALIDATE
 
 # Run simple workflow 3
 java -jar target/workflow-cli-1.0.0.jar workflow3 -n "Monthly Cleanup" -t "01:00"
@@ -294,6 +348,155 @@ Outputs:
 ═══════════════════════════════════════════════
 ```
 
+## Testing Error Handling (Workflow 2)
+
+Workflow 2 includes built-in failure simulation for testing error handling and retry logic:
+
+### Test Scenarios
+
+**1. Test Recoverable Error with Automatic Retry**
+
+```bash
+# Simulate Init failure - will retry automatically
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure INIT -r 2"
+```
+
+Expected output:
+- Init fails on first attempt
+- Error hook is called
+- System waits (exponential backoff)
+- Retries up to 2 times
+- If all retries fail, cleanup hook is called
+
+**2. Test Non-Recoverable Error (Immediate Failure)**
+
+```bash
+# Simulate Validate failure - fails immediately (no retry)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure VALIDATE"
+```
+
+Expected output:
+- Validate fails immediately
+- No retry attempts (validation errors are non-recoverable)
+- Cleanup hook is called
+- Workflow exits with error
+
+**3. Test Successful Retry**
+
+```bash
+# Fail once, then succeed on retry
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure PLAN --failure-attempts 1 -r 2"
+```
+
+Expected output:
+- Plan fails on first attempt
+- Error hook is called
+- System retries
+- Plan succeeds on second attempt
+- Workflow continues and completes successfully
+
+**4. Test Different Stages**
+
+```bash
+# Test Init stage (recoverable)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure INIT"
+
+# Test Validate stage (non-recoverable)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure VALIDATE"
+
+# Test Plan stage (recoverable)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure PLAN"
+
+# Test Apply stage (non-recoverable)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure APPLY"
+
+# Test Output stage (recoverable)
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure OUTPUT"
+```
+
+### Recoverable vs Non-Recoverable Errors
+
+| Stage | Error Type | Retry Behavior |
+|-------|-----------|----------------|
+| **Init** | Recoverable | Automatic retry with backoff |
+| **Validate** | Non-Recoverable | Fails immediately, no retry |
+| **Plan** | Recoverable | Automatic retry with backoff |
+| **Apply** | Non-Recoverable | Fails immediately, no retry |
+| **Output** | Recoverable | Automatic retry with backoff |
+
+**Why different error types?**
+- **Recoverable**: Transient issues (network, timeouts) - worth retrying
+- **Non-Recoverable**: Configuration/validation errors - retrying won't help
+
+### Example: Testing Recoverable Error with Retry
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure PLAN --failure-attempts 1 -r 2"
+```
+
+**Expected Output:**
+
+```
+⚠ TEST MODE: Simulating failure at stage: PLAN
+⚠ Failure will occur for 1 attempt(s)
+═══════════════════════════════════════════════
+
+═══════════════════════════════════════════════
+  Workflow 2: Terraform Template Pattern
+  (With Error Handling & Retry Logic)
+═══════════════════════════════════════════════
+...
+
+[Stage 3/5] Terraform Plan
+─────────────────────────────
+...
+⚠ [TEST MODE] Simulating failure (attempt 1/1)
+
+⚠ Stage failed (attempt 1/3): Planning failed: Simulated plan failure: Unable to read remote state
+
+[Error Hook] Stage error detected:
+  Stage: PLAN
+  Attempt: 1/3
+  Total errors so far: 1
+  Retrying in 2 seconds...
+
+[Stage 3/5] Terraform Plan
+─────────────────────────────
+...
+✓ [TEST MODE] Allowing stage to succeed after 1 simulated failure(s)
+✓ Plan generated successfully!
+...
+✓ Workflow completed successfully!
+```
+
+### Example: Testing Non-Recoverable Error
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.arguments="workflow2 -n 'Test' -t 'now' --simulate-failure VALIDATE"
+```
+
+**Expected Output:**
+
+```
+[Stage 2/5] Terraform Validate
+─────────────────────────────
+...
+⚠ [TEST MODE] Simulating failure (attempt 1/999)
+
+✗ Workflow failed at stage: VALIDATE
+  Error: Validation failed: Simulated validation failure: Invalid resource reference
+  Recoverable: false
+
+[Cleanup Hook] Performing workflow cleanup...
+  Failed stage: VALIDATE
+  Total errors encountered: 1
+  (Note: This was a simulated failure for testing)
+  
+✗ Workflow 2 failed!
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -324,9 +527,18 @@ src/
 │   │               │   ├── TimestampBasedStrategy.java
 │   │               │   ├── CustomPrefixStrategy.java
 │   │               │   └── SimpleStrategy.java
-│   │               └── template/
-│   │                   ├── TerraformWorkflowTemplate.java (abstract template)
-│   │                   └── Workflow2TerraformTemplate.java (concrete impl)
+│   │               ├── template/
+│   │               │   ├── exceptions/
+│   │               │   │   ├── TerraformWorkflowException.java (base exception)
+│   │               │   │   ├── InitializationException.java
+│   │               │   │   ├── ValidationException.java
+│   │               │   │   ├── PlanningException.java
+│   │               │   │   ├── ApplyException.java
+│   │               │   │   └── OutputException.java
+│   │               │   ├── TerraformWorkflowTemplate.java (abstract template)
+│   │               │   └── Workflow2TerraformTemplate.java (concrete impl)
+│   │               └── context/
+│   │                   └── TerraformContext.java
 │   └── resources/
 │       └── application.properties
 └── test/
@@ -405,24 +617,86 @@ Benefits:
 
 ### Template Method Pattern (Workflow 2)
 
-Workflow 2 implements the Template Method pattern to define the workflow algorithm structure:
+Workflow 2 implements the Template Method pattern to define the workflow algorithm structure with comprehensive error handling and context passing:
 
 - **TerraformWorkflowTemplate**: Abstract class defining the template method (`executeWorkflow`)
 - **Template Method**: Defines the invariant workflow skeleton (init → validate → plan → apply → output)
-- **Abstract Methods**: Each stage is an abstract method that must be implemented by subclasses
-- **Hook Methods**: `printHeader()` and `printFooter()` can be optionally overridden for customization
+- **Context Passing**: `TerraformContext` is passed through all stages
+- **Abstract Methods**: Each stage is an abstract method accepting context that must be implemented by subclasses
+- **Stage Dependencies**: Each stage can verify prerequisites from context before execution
+- **Hook Methods**: 
+  - `printHeader()` and `printFooter()` - Customize output display
+  - `onStageError()` - Called before each retry attempt
+  - `cleanup()` - Called on final failure for rollback logic
 - **Workflow2TerraformTemplate**: Concrete implementation with specific behavior for each stage
+
+**Error Handling Architecture:**
+
+1. **Custom Exceptions**
+   - `TerraformWorkflowException` - Base exception with stage info
+   - `InitializationException` - Init failures (recoverable)
+   - `ValidationException` - Validation failures (non-recoverable)
+   - `PlanningException` - Plan failures (recoverable)
+   - `ApplyException` - Apply failures (non-recoverable)
+   - `OutputException` - Output failures (recoverable)
+
+2. **Retry Mechanism**
+   ```java
+   - Recoverable errors automatically retry
+   - Exponential backoff (2s, 4s, 6s...)
+   - Max retries configurable
+   - onStageError() hook called before each retry
+   ```
+
+3. **Error Hooks**
+   ```java
+   protected void onStageError(TerraformWorkflowException e, int attempt)
+   // Called before retry - implement custom recovery logic
+   
+   protected void cleanup(TerraformWorkflowException e)
+   // Called on final failure - implement rollback logic
+   ```
 
 Benefits:
 - Defines the algorithm structure in one place
 - Prevents subclasses from changing the workflow sequence
 - Promotes code reuse through inheritance
 - Allows customization of specific steps while maintaining overall structure
+- **Shared state through context object**
+- **Stage prerequisite validation**
+- **Built-in error handling with retry logic**
+- **Extensible error recovery through hooks**
+- **Automatic cleanup on failure**
 - Easy to create new workflows by extending the template
+
+**Context Passing:**
+The `TerraformContext` object allows stages to:
+- Share state and data between stages
+- Store intermediate results (e.g., resource IDs, provider versions)
+- Verify prerequisites before execution
+- Maintain workflow metadata throughout execution
+
+**Example:**
+```java
+// Init stage stores data in context
+context.setAttribute("providers_initialized", true);
+context.setAttribute("vpc_id", "vpc-abc123");
+
+// Validate stage verifies prerequisite
+Boolean providersInitialized = context.getAttribute("providers_initialized", Boolean.class);
+if (providersInitialized == null || !providersInitialized) {
+    return false; // Prerequisite not met
+}
+
+// Output stage retrieves resource IDs
+String vpcId = context.getAttribute("vpc_id", String.class);
+```
 
 **Key Difference from Chain of Responsibility:**
 - Template Method: The algorithm structure is fixed in the abstract class; subclasses fill in the details
 - Chain of Responsibility: Handlers are independent and can be dynamically chained
+- Template Method has built-in error handling and retry logic at the framework level
+- Both patterns now support context passing for shared state
 
 ---
 
